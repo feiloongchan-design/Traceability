@@ -364,6 +364,31 @@
       gap: 0.5rem;
       margin-top: 1rem;
     }
+
+    /* Confirm modal message */
+    .confirm-message {
+      margin-bottom: 1.25rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #1e293b;
+      color: #fff;
+      padding: 0.6rem 1.2rem;
+      border-radius: 999px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      opacity: 0;
+      transition: opacity 0.25s, transform 0.25s;
+      pointer-events: none;
+      z-index: 200;
+    }
   </style>
 </head>
 <body>
@@ -429,7 +454,7 @@
   <div class="modal-overlay" id="confirmModal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
     <div class="modal">
       <h2 id="confirmTitle">Confirm</h2>
-      <p id="confirmMessage" style="margin-bottom:1.25rem;color:var(--muted);font-size:0.95rem;"></p>
+      <p id="confirmMessage" class="confirm-message"></p>
       <div class="modal-actions">
         <button class="btn btn-outline" id="confirmCancelBtn">Cancel</button>
         <button class="btn btn-danger" id="confirmOkBtn">Delete</button>
@@ -438,11 +463,7 @@
   </div>
 
   <!-- Toast notification -->
-  <div id="toast" role="alert" aria-live="assertive" style="
-    position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(80px);
-    background:#1e293b;color:#fff;padding:0.6rem 1.2rem;border-radius:999px;
-    font-size:0.875rem;font-weight:500;opacity:0;transition:opacity 0.25s,transform 0.25s;
-    pointer-events:none;z-index:200;"></div>
+  <div id="toast" class="toast" role="alert" aria-live="assertive"></div>
 
   <!-- Export modal -->
   <div class="modal-overlay" id="exportModal" role="dialog" aria-modal="true" aria-label="Export checklist">
@@ -467,7 +488,7 @@
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
       } catch (err) {
-        const detail = err ? (err.message || err.name || 'storage error') : 'storage error';
+        const detail = err?.message || err?.name || 'storage error';
         showToast('Could not save: ' + detail);
       }
     }
@@ -494,6 +515,7 @@
       if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
         const buf = new Uint32Array(4);
         crypto.getRandomValues(buf);
+        // Each Uint32 renders as 8 hex chars → 4 × 8 = 32-char ID
         return Array.from(buf, n => n.toString(16).padStart(8, '0')).join('');
       }
       return Date.now().toString(36)
