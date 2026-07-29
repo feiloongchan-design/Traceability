@@ -477,6 +477,7 @@
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) items = JSON.parse(raw);
       } catch (err) {
+        console.error('[Traceability] Failed to load saved data:', err);
         showToast('Could not load saved data — starting fresh.');
         items = [];
       }
@@ -487,8 +488,18 @@
       if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         return crypto.randomUUID();
       }
-      // Fallback: timestamp + extra random entropy
-      return Date.now().toString(36) + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+      // Fallback for environments without crypto.randomUUID (very old browsers).
+      // Uses getRandomValues when available for stronger entropy; otherwise
+      // relies on Math.random. IDs are long enough to make collisions negligible.
+      if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+        const buf = new Uint32Array(4);
+        crypto.getRandomValues(buf);
+        return Array.from(buf, n => n.toString(16).padStart(8, '0')).join('');
+      }
+      return Date.now().toString(36)
+        + Math.random().toString(36).slice(2)
+        + Math.random().toString(36).slice(2)
+        + Math.random().toString(36).slice(2);
     }
 
     function fmt(iso) {
@@ -521,7 +532,10 @@
         okBtn.removeEventListener('click', handleOk);
         cancelBtn.removeEventListener('click', handleCancel);
       }
-      function handleOk()     { close(); onOk(); }
+      function handleOk() {
+        close();
+        try { onOk(); } catch (err) { console.error('[Traceability] Confirm callback error:', err); }
+      }
       function handleCancel() { close(); }
       okBtn.addEventListener('click', handleOk);
       cancelBtn.addEventListener('click', handleCancel);
@@ -685,14 +699,7 @@
           showToast('Could not copy to clipboard.');
         });
       } else {
-        // Legacy fallback for browsers without Clipboard API support
-        try {
-          document.execCommand('copy'); // eslint-disable-line no-restricted-globals
-          btn.textContent = 'Copied!';
-          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
-        } catch (_) {
-          showToast('Could not copy to clipboard.');
-        }
+        showToast('Clipboard API not supported in this browser.');
       }
     });
 
