@@ -388,10 +388,11 @@
         type="text"
         id="newItemText"
         placeholder="Add a checklist item…"
+        aria-label="New checklist item text"
         autocomplete="off"
         required
       />
-      <select id="newItemCategory">
+      <select id="newItemCategory" aria-label="Category">
         <option value="General">General</option>
         <option value="Requirements">Requirements</option>
         <option value="Design">Design</option>
@@ -414,9 +415,9 @@
         <button class="filter-tab" data-filter="done">Done</button>
       </div>
       <div class="toolbar-actions">
-        <button class="btn btn-outline" id="clearDoneBtn">Clear Done</button>
-        <button class="btn btn-outline" id="exportBtn">Export</button>
-        <button class="btn btn-danger" id="clearAllBtn">Clear All</button>
+        <button class="btn btn-outline" id="clearDoneBtn" aria-label="Clear all completed checklist items">Clear Done</button>
+        <button class="btn btn-outline" id="exportBtn" aria-label="Export checklist as JSON">Export</button>
+        <button class="btn btn-danger" id="clearAllBtn" aria-label="Clear all checklist items">Clear All</button>
       </div>
     </div>
 
@@ -424,8 +425,27 @@
     <div id="listContainer"></div>
   </div>
 
+  <!-- Confirm modal -->
+  <div class="modal-overlay" id="confirmModal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="modal">
+      <h2 id="confirmTitle">Confirm</h2>
+      <p id="confirmMessage" style="margin-bottom:1.25rem;color:var(--muted);font-size:0.95rem;"></p>
+      <div class="modal-actions">
+        <button class="btn btn-outline" id="confirmCancelBtn">Cancel</button>
+        <button class="btn btn-danger" id="confirmOkBtn">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast" role="alert" aria-live="assertive" style="
+    position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(80px);
+    background:#1e293b;color:#fff;padding:0.6rem 1.2rem;border-radius:999px;
+    font-size:0.875rem;font-weight:500;opacity:0;transition:opacity 0.25s,transform 0.25s;
+    pointer-events:none;z-index:200;"></div>
+
   <!-- Export modal -->
-  <div class="modal-overlay" id="exportModal">
+  <div class="modal-overlay" id="exportModal" role="dialog" aria-modal="true" aria-label="Export checklist">
     <div class="modal">
       <h2>Export Checklist (JSON)</h2>
       <textarea id="exportText" readonly></textarea>
@@ -444,14 +464,21 @@
 
     // ── Persistence ───────────────────────────────────────────────────────────
     function save() {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch (_) {}
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      } catch (err) {
+        showToast('Could not save: ' + (err && err.name ? err.name : 'storage error'));
+      }
     }
 
     function load() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) items = JSON.parse(raw);
-      } catch (_) { items = []; }
+      } catch (err) {
+        showToast('Could not load saved data — starting fresh.');
+        items = [];
+      }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -462,6 +489,37 @@
     function fmt(iso) {
       const d = new Date(iso);
       return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    // ── Toast notification ────────────────────────────────────────────────────
+    let toastTimer;
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.style.opacity = '1';
+      el.style.transform = 'translateX(-50%) translateY(0)';
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateX(-50%) translateY(80px)';
+      }, 3000);
+    }
+
+    // ── Confirm modal ─────────────────────────────────────────────────────────
+    function showConfirm(message, onOk) {
+      document.getElementById('confirmMessage').textContent = message;
+      document.getElementById('confirmModal').classList.add('open');
+      const okBtn = document.getElementById('confirmOkBtn');
+      const cancelBtn = document.getElementById('confirmCancelBtn');
+      function close() {
+        document.getElementById('confirmModal').classList.remove('open');
+        okBtn.removeEventListener('click', handleOk);
+        cancelBtn.removeEventListener('click', handleCancel);
+      }
+      function handleOk()     { close(); onOk(); }
+      function handleCancel() { close(); }
+      okBtn.addEventListener('click', handleOk);
+      cancelBtn.addEventListener('click', handleCancel);
     }
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -584,11 +642,11 @@
 
     document.getElementById('clearAllBtn').addEventListener('click', () => {
       if (items.length === 0) return;
-      if (confirm('Clear all items? This cannot be undone.')) {
+      showConfirm('Clear all items? This cannot be undone.', () => {
         items = [];
         save();
         render();
-      }
+      });
     });
 
     document.getElementById('exportBtn').addEventListener('click', () => {
@@ -609,18 +667,31 @@
     document.getElementById('copyExportBtn').addEventListener('click', () => {
       const ta = document.getElementById('exportText');
       ta.select();
-      try {
-        navigator.clipboard.writeText(ta.value).catch(() => document.execCommand('copy'));
-      } catch (_) {
-        document.execCommand('copy');
+      const btn = document.getElementById('copyExportBtn');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(ta.value).then(() => {
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        }).catch(() => {
+          showToast('Could not copy to clipboard.');
+        });
+      } else {
+        try {
+          document.execCommand('copy');
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        } catch (_) {
+          showToast('Could not copy to clipboard.');
+        }
       }
-      document.getElementById('copyExportBtn').textContent = 'Copied!';
-      setTimeout(() => { document.getElementById('copyExportBtn').textContent = 'Copy'; }, 1500);
     });
 
-    // ── Keyboard: Escape closes modal ─────────────────────────────────────────
+    // ── Keyboard: Escape closes modals ────────────────────────────────────────
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') document.getElementById('exportModal').classList.remove('open');
+      if (e.key === 'Escape') {
+        document.getElementById('exportModal').classList.remove('open');
+        document.getElementById('confirmModal').classList.remove('open');
+      }
     });
 
     // ── Bootstrap ─────────────────────────────────────────────────────────────
