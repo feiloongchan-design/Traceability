@@ -387,7 +387,7 @@
       <input
         type="text"
         id="newItemText"
-        placeholder="Add a checklist item…"
+        placeholder="Add a checklist item&hellip;"
         aria-label="New checklist item text"
         autocomplete="off"
         required
@@ -467,7 +467,8 @@
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
       } catch (err) {
-        showToast('Could not save: ' + (err && err.name ? err.name : 'storage error'));
+        const detail = err ? (err.message || err.name || 'storage error') : 'storage error';
+        showToast('Could not save: ' + detail);
       }
     }
 
@@ -483,7 +484,11 @@
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     function genId() {
-      return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+      }
+      // Fallback: timestamp + extra random entropy
+      return Date.now().toString(36) + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
     }
 
     function fmt(iso) {
@@ -558,12 +563,12 @@
           <ul class="checklist">`;
         groups[cat].forEach(it => {
           html += `<li class="checklist-item${it.done ? ' done' : ''}" data-id="${it.id}">
-            <input type="checkbox" id="cb-${it.id}" ${it.done ? 'checked' : ''} aria-label="Toggle ${escHtml(it.text)}" />
+            <input type="checkbox" id="cb-${it.id}" ${it.done ? 'checked' : ''} />
             <div class="item-content">
               <label class="item-label" for="cb-${it.id}">${escHtml(it.text)}</label>
               <span class="item-meta">Added ${fmt(it.createdAt)}</span>
             </div>
-            <button class="btn btn-danger" data-delete="${it.id}" aria-label="Delete item" title="Delete">
+            <button class="btn btn-danger" data-delete="${it.id}" aria-label="Delete: ${escHtml(it.text)}" title="Delete">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
             </button>
           </li>`;
@@ -604,9 +609,13 @@
       const del = e.target.closest('[data-delete]');
       if (del) {
         const id = del.dataset.delete;
-        items = items.filter(i => i.id !== id);
-        save();
-        render();
+        const item = items.find(i => i.id === id);
+        const label = item ? item.text : 'this item';
+        showConfirm('Delete "' + label + '"?', () => {
+          items = items.filter(i => i.id !== id);
+          save();
+          render();
+        });
       }
     });
 
@@ -676,8 +685,9 @@
           showToast('Could not copy to clipboard.');
         });
       } else {
+        // Legacy fallback for browsers without Clipboard API support
         try {
-          document.execCommand('copy');
+          document.execCommand('copy'); // eslint-disable-line no-restricted-globals
           btn.textContent = 'Copied!';
           setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
         } catch (_) {
